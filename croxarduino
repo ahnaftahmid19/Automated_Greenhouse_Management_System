@@ -1,0 +1,183 @@
+/********************************************************************
+* Example Sketch for:
+*  - Reading Soil Moisture (A0) & LDR (A1)
+*  - Initializing & Reading ENS160 (I2C)
+*  - Driving 2 cooler fans via motor driver (ENA=5, IN1=6, IN2=7)
+*  - Controlling 2 relays (pump=9, heater=8)
+*  - Displaying values on a 16×2 I2C LCD
+*
+* Adapt as needed for your project logic!
+********************************************************************/
+
+
+#include <Wire.h>
+#include <Adafruit_LiquidCrystal.h>  // or use <LiquidCrystal_I2C.h> if that’s your library
+#include <Adafruit_ENS160.h>        // Adafruit ENS160 sensor library
+
+
+// ------------------- PIN DEFINITIONS -------------------
+// Motor driver
+const int ENA_PIN   = 5;  // PWM speed control
+const int IN1_PIN   = 6; 
+const int IN2_PIN   = 7; 
+
+
+// Relays
+const int PUMP_RELAY_PIN   = 9;
+const int HEATER_RELAY_PIN = 8;
+
+
+// Analog Sensors
+const int SOIL_PIN = A0;
+const int LDR_PIN  = A1; 
+
+
+// I2C lines for ENS160 and LCD: SDA/SCL (hardware I2C pins)
+
+
+// ------------------- OBJECTS ---------------------------
+Adafruit_ENS160 ens160;                 // ENS160 object
+Adafruit_LiquidCrystal lcd(0);          // Using Adafruit's I2C backpack at address 0
+
+
+// ------------------- SETUP -----------------------------
+void setup() {
+ // Serial for debug (optional)
+ Serial.begin(9600);
+
+
+ // Pin modes
+ pinMode(ENA_PIN, OUTPUT);
+ pinMode(IN1_PIN, OUTPUT);
+ pinMode(IN2_PIN, OUTPUT);
+  pinMode(PUMP_RELAY_PIN, OUTPUT);
+ pinMode(HEATER_RELAY_PIN, OUTPUT);
+
+
+ pinMode(SOIL_PIN, INPUT);
+ pinMode(LDR_PIN, INPUT);
+
+
+ // Initialize I2C (Wire)
+ Wire.begin();
+
+
+ // Initialize LCD (16x2)
+ lcd.begin(16, 2);
+ // Some libraries use lcd.backlight() or lcd.setBacklight(HIGH)
+ lcd.setBacklight(HIGH);
+
+
+ // Initialize ENS160
+ if (!ens160.begin()) {
+   Serial.println("ENS160 not found! Check wiring.");
+   while (1) {
+     delay(10);
+   }
+ }
+
+
+ // Optionally set temp/humidity for compensation if you have that data:
+ // ens160.setEnvData(25.0, 50.0); // example T=25C, RH=50%
+
+
+ // For motor driver, set an initial state: no rotation
+ digitalWrite(IN1_PIN, LOW);
+ digitalWrite(IN2_PIN, LOW);
+ analogWrite(ENA_PIN, 0); // speed = 0
+
+
+ // For relays, assume off initially (LOW or HIGH depends on your relay module’s active state)
+ digitalWrite(PUMP_RELAY_PIN, LOW);
+ digitalWrite(HEATER_RELAY_PIN, LOW);
+
+
+ Serial.println("Setup complete.");
+}
+
+
+// ------------------- LOOP ------------------------------
+void loop() {
+ // 1) Read analog sensors
+ int soilVal = analogRead(SOIL_PIN);
+ int ldrVal  = analogRead(LDR_PIN);
+
+
+ // 2) Update ENS160 data & read
+ // If you have external T/H sensor, update with setEnvData(...) each loop
+ // e.g., ens160.setEnvData(tempC, humidRH);
+
+
+ ens160.measure(true); // blocking measurement
+ float aqi   = ens160.getAQI();   // overall air quality index
+ float tvoc  = ens160.getTVOC(); // in ppb
+ float eco2  = ens160.getECO2(); // in ppm
+ // If you have the latest library, you can also check getRHumidity(), etc.
+
+
+ // 3) Display info on LCD (pick what you want to show)
+ lcd.clear();
+ lcd.setCursor(0, 0);
+ lcd.print("Soil:");
+ lcd.print(soilVal);
+ lcd.print(" LDR:");
+ lcd.print(ldrVal);
+
+
+ lcd.setCursor(0, 1);
+ lcd.print("AQI:");
+ lcd.print(aqi, 0);
+ lcd.print(" TVOC:");
+ lcd.print(tvoc, 0);
+
+
+ // 4) Example fan control logic
+ // Suppose we vary fan speed based on LDR (just as an example)
+ int fanSpeed = map(ldrVal, 0, 1023, 0, 255);
+ fanSpeed = constrain(fanSpeed, 0, 255);
+
+
+ // Enable forward direction
+ digitalWrite(IN1_PIN, HIGH);
+ digitalWrite(IN2_PIN, LOW);
+
+
+ // Set PWM
+ analogWrite(ENA_PIN, fanSpeed);
+
+
+ // 5) Example relay logic (demo)
+ // a) Turn on pump if soil < 400
+ if (soilVal < 400) {
+   digitalWrite(PUMP_RELAY_PIN, HIGH);
+ } else {
+   digitalWrite(PUMP_RELAY_PIN, LOW);
+ }
+
+
+ // b) Turn on heater if AQI is too high or something arbitrary
+ // Actually, you'd normally base heater on temperature
+ // For demonstration, let's just do something silly
+ if (aqi > 3) {
+   digitalWrite(HEATER_RELAY_PIN, HIGH);
+ } else {
+   digitalWrite(HEATER_RELAY_PIN, LOW);
+ }
+
+
+ // Print debug info (optional)
+ Serial.print("Soil=");
+ Serial.print(soilVal);
+ Serial.print(", LDR=");
+ Serial.print(ldrVal);
+ Serial.print(", AQI=");
+ Serial.print(aqi);
+ Serial.print(", eCO2=");
+ Serial.print(eco2);
+ Serial.print(", TVOC=");
+ Serial.println(tvoc);
+
+
+ // Delay some time before next read
+ delay(2000);
+}
