@@ -1,0 +1,73 @@
+#define BLYNK_TEMPLATE_ID "TMPL6lIk7CUeI" // Replace with your Template ID
+#define BLYNK_TEMPLATE_NAME "CropX" // Replace with your Template Name
+#define BLYNK_PRINT Serial
+
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+
+// WiFi Credentials
+const char* ssid = "Sagor";       // Replace with your WiFi SSID
+const char* password = "987654321"; // Replace with your WiFi password
+
+
+// Blynk Auth Token
+char auth[] = "3bfvXaIdoP1efmD32hIgDn8YCFjz2D_u";  // Replace with your Blynk Auth Token
+
+
+// Hardware Serial communication with Arduino
+String receivedData = "";  // Buffer for incoming data from Arduino
+
+
+void setup() {
+  Serial.begin(9600);         // Communication with Arduino
+  Serial.setTimeout(500);     // Serial timeout for reading data
+  Blynk.begin(auth, ssid, password); // Connect to Blynk
+
+
+  Serial.println("ESP8266 Ready");
+}
+
+
+void loop() {
+  Blynk.run(); // Handle Blynk events
+
+
+  // Read data from Arduino
+  if (Serial.available() > 0) {
+    receivedData = Serial.readStringUntil('\n');
+    receivedData.trim(); // Remove extra spaces or newline characters
+    if (receivedData.startsWith("LDR:") && receivedData.indexOf(",Soil:") > -1) {
+      // Parse sensor values from the received string
+      int ldrValue = receivedData.substring(4, receivedData.indexOf(",")).toInt();
+      int soilValue = receivedData.substring(receivedData.indexOf("Soil:") + 5).toInt();
+
+
+      // Send data to Blynk
+      Blynk.virtualWrite(V1, ldrValue);  // Send LDR value to Virtual Pin V1
+      Blynk.virtualWrite(V0, soilValue); // Send Soil Moisture value to Virtual Pin V2
+    }
+  }
+}
+
+
+// Blynk Virtual Pin handlers for controlling pump and heater
+BLYNK_WRITE(V3) {
+  int pumpState = param.asInt(); // Get the value from the Blynk app
+  if (pumpState) {
+    Serial.println("PUMP_ON"); // Send command to Arduino
+  } else {
+    Serial.println("PUMP_OFF"); // Send command to Arduino
+  }
+}
+
+
+BLYNK_WRITE(V4) {
+  int heaterState = param.asInt(); // Get the value from the Blynk app
+  if (heaterState) {
+    Serial.println("HEATER_ON"); // Send command to Arduino
+  } else {
+    Serial.println("HEATER_OFF"); // Send command to Arduino
+  }
+}
